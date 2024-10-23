@@ -5,16 +5,45 @@ Be sure you have minitorch installed in you Virtual Env.
 
 import minitorch
 
+
 # Use this function to make a random parameter in
 # your module.
 def RParam(*shape):
     r = 2 * (minitorch.rand(shape) - 0.5)
     return minitorch.Parameter(r)
 
-# TODO: Implement for Task 2.5.
 
 def default_log_fn(epoch, total_loss, correct, losses):
     print("Epoch ", epoch, " loss ", total_loss, "correct", correct)
+
+
+class Network(minitorch.Module):
+    def __init__(self, hidden_layers: int):
+        super().__init__()
+        self.layer1 = Linear(2, hidden_layers)
+        self.layer2 = Linear(hidden_layers, hidden_layers)
+        self.layer3 = Linear(hidden_layers, 1)
+
+    def forward(self, x):
+        x = self.layer1.forward(x).relu()
+        x = self.layer2.forward(x).relu()
+        return self.layer3.forward(x).sigmoid()
+
+
+class Linear(minitorch.Module):
+    def __init__(self, in_size: int, out_size: int):
+        super().__init__()
+        self.weights = RParam(in_size, out_size)
+        self.bias = RParam(out_size)
+
+        self.hidden = out_size
+
+    def forward(self, x):
+        batch, features = x.shape
+
+        return (
+            (x.view(batch, features, 1) * self.weights.value).sum(dim=1).view(batch, self.hidden) + self.bias.value
+        )
 
 
 class TensorTrain:

@@ -10,27 +10,27 @@ import numpy as np
 from . import operators
 from .autodiff import Context, Variable, backpropagate
 from .tensor_data import TensorData
+from .tensor_functions import tensor
 
 # Comment these out if not yet implemented
 from .tensor_functions import (
-    EQ,
-    LT,
-    Add,
-    All,
     Copy,
-    Exp,
-    Inv,
-    IsClose,
-    Log,
-    MatMul,
-    Mul,
-    Neg,
+    View,
     Permute,
+    Neg,
+    Inv,
+    Log,
+    Exp,
     ReLU,
     Sigmoid,
+    Add,
+    Mul,
+    MatMul,
+    EQ,
+    LT,
+    IsClose,
+    All,
     Sum,
-    View,
-    tensor,
 )
 
 if TYPE_CHECKING:
@@ -94,11 +94,22 @@ class Tensor:
 
         self.f = backend
 
+    @property
+    def size(self) -> int:
+        """Size of tensor"""
+        return self._tensor.size
+
     def requires_grad_(self, x: bool) -> None:
+        """Creates a gradient for the tensor"""
         self.history = History()
 
     def requires_grad(self) -> bool:
+        """True if tensor requires gradient"""
         return self.history is not None
+
+    def zero_grad_(self) -> None:
+        """Removes gradient"""
+        self.grad = None
 
     def to_numpy(self) -> npt.NDArray[np.float64]:
         """Returns
@@ -194,6 +205,8 @@ class Tensor:
         # END CODE CHANGE (2021)
 
     def zeros(self, shape: Optional[UserShape] = None) -> Tensor:
+        """Creates a tensor of zeros with shape defaulting to that of `self`"""
+
         def zero(shape: UserShape) -> Tensor:
             return Tensor.make(
                 [0.0] * int(operators.prod(shape)), shape, backend=self.backend
@@ -239,14 +252,27 @@ class Tensor:
         return self.history is not None and self.history.last_fn is None
 
     def is_constant(self) -> bool:
+        """True if this variable is a constant"""
         return self.history is None
 
     @property
     def parents(self) -> Iterable[Variable]:
+        """Returns the inputs to the function used to generate this variable"""
         assert self.history is not None
         return self.history.inputs
 
     def chain_rule(self, d_output: Any) -> Iterable[Tuple[Variable, Any]]:
+        """Applies the chain rule to this variable - calculating the derivative with respect to all its input
+
+        Args:
+        ----
+            d_output (Any): the derivative value of the outer function
+
+        Returns:
+        -------
+            A iterable of the input variables and the value of the derivative with respect to that variable
+
+        """
         h = self.history
         assert h is not None
         assert h.last_fn is not None
@@ -260,10 +286,39 @@ class Tensor:
         ]
 
     def backward(self, grad_output: Optional[Tensor] = None) -> None:
+        """Calls autodiff to fill in the derivatives for the history of this object.
+
+        Args:
+        ----
+            grad_output (tensor, opt): starting derivative to backpropagate through the model
+                                       (typically left out, and assumed to be all 1.0).
+
+        """
         if grad_output is None:
             assert self.shape == (1,), "Must provide grad_output if non-scalar"
             grad_output = Tensor.make([1.0], (1,), backend=self.backend)
         backpropagate(self, grad_output)
+
+    def __neg__(self):
+        return Neg.apply(self)
+
+    def __add__(self, b: TensorLike) -> Tensor:
+        return Add.apply(self, self._ensure_tensor(b))
+
+    def __radd__(self, b: TensorLike) -> Tensor:
+        return Add.apply(self._ensure_tensor(b), self)
+
+    def __sub__(self, b: TensorLike) -> Tensor:
+        return Add.apply(self, Neg.apply(self._ensure_tensor(b)))
+
+    def __rsub__(self, b: TensorLike) -> Tensor:
+        return Add.apply(self._ensure_tensor(b), Neg.apply(self))
+
+    def __mul__(self, b: TensorLike) -> Tensor:
+        return Mul.apply(self, self._ensure_tensor(b))
+
+    def __rmul__(self, b: TensorLike) -> Tensor:
+        return Mul.apply(self._ensure_tensor(b), self)
 
     def __truediv__(self, b: TensorLike) -> Tensor:
         return Mul.apply(self, Inv.apply(self._ensure_tensor(b)))
@@ -275,6 +330,19 @@ class Tensor:
         """Not used until Module 3"""
         return MatMul.apply(self, b)
 
+    def __eq__(self, b: TensorLike) -> Tensor:
+        return EQ.apply(self, self._ensure_tensor(b))
+
+    def __lt__(self, b: TensorLike) -> Tensor:
+        return LT.apply(self, self._ensure_tensor(b))
+
+    def __gt__(self, b: TensorLike) -> Tensor:
+        return LT.apply(self._ensure_tensor(b), self)
+
+    def is_close(self, b: TensorLike) -> Tensor:
+        """Computes whether values are close to correspondents of `b`"""
+        return IsClose.apply(self, self._ensure_tensor(b))
+
     @property
     def shape(self) -> UserShape:
         """Returns
@@ -283,5 +351,48 @@ class Tensor:
         """
         return self._tensor.shape
 
-    # Functions
-    # TODO: Implement for Task 2.3.
+    def inv(self) -> Tensor:
+        """Invokes the inverse function on `self`"""
+        return Inv.apply(self)
+
+    def log(self) -> Tensor:
+        """Invokes the logarithmic function on `self`"""
+        return Log.apply(self)
+
+    def exp(self) -> Tensor:
+        """Invokes the exponential function on `self`"""
+        return Exp.apply(self)
+
+    def relu(self) -> Tensor:
+        """Invokes the ReLU function on `self`"""
+        return ReLU.apply(self)
+
+    def sigmoid(self) -> Tensor:
+        """Invokes the signmoid function on `self`"""
+        return Sigmoid.apply(self)
+
+    def all(self, dim: int | None = None) -> Tensor:
+        """Computes truthiness over a specified axis or all contained values if not provided"""
+        if dim is None:
+            return All.apply(self.contiguous().view(self.size), self._ensure_tensor(0))
+        else:
+            return All.apply(self, self._ensure_tensor(dim))
+
+    def sum(self, dim: int | None = None) -> Tensor:
+        """Computes sum over a specified axis or all contained values if not provided"""
+        if dim is None:
+            return Sum.apply(self.contiguous().view(self.size), self._ensure_tensor(0))
+        else:
+            return Sum.apply(self, self._ensure_tensor(dim))
+
+    def mean(self, dim: int | None = None) -> Tensor:
+        """Computes mean over a specified axis or all contained values if not provided"""
+        return self.sum(dim=dim) / (self.size if dim is None else self.shape[dim])
+
+    def permute(self, *order: int) -> Tensor:
+        """Permutes data reordering axes in manner specified"""
+        return Permute.apply(self, tensor(order))
+
+    def view(self, *shape: int) -> Tensor:
+        """Imposes new shape in manner specified"""
+        return View.apply(self, tensor(shape))

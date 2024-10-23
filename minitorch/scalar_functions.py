@@ -38,6 +38,7 @@ class ScalarFunction:
 
     @classmethod
     def apply(cls, *vals: ScalarLike) -> Scalar:
+        """Invoke the function with the passed arguments storing the passed `vals`"""
         raw_vals = []
         scalars = []
         for v in vals:
@@ -60,17 +61,34 @@ class ScalarFunction:
         return minitorch.scalar.Scalar(c, back)
 
 
-# Examples
-class Add(ScalarFunction):
-    """Addition function $f(x, y) = x + y$"""
+class Neg(ScalarFunction):
+    """Negation function $f(x) = -x$"""
 
     @staticmethod
-    def forward(ctx: Context, a: float, b: float) -> float:
-        return a + b
+    def forward(ctx: Context, a: float) -> float:
+        """Invoke negation function saving arguments into context as necessary"""
+        return operators.neg(a)
 
     @staticmethod
-    def backward(ctx: Context, d_output: float) -> Tuple[float, ...]:
-        return d_output, d_output
+    def backward(ctx: Context, d_output: float) -> float:
+        """Compute negation derivative on arguments in context, scaled by arbitrary input"""
+        return -d_output
+
+
+class Inv(ScalarFunction):
+    """Inverse function $f(x) = 1 / x$"""
+
+    @staticmethod
+    def forward(ctx: Context, a: float) -> float:
+        """Invoke inverse function saving arguments into context as necessary"""
+        ctx.save_for_backward(a)
+        return operators.inv(a)
+
+    @staticmethod
+    def backward(ctx: Context, d_output: float) -> float:
+        """Compute inverse derivative on arguments in context, scaled by arbitrary input"""
+        (a,) = ctx.saved_values
+        return operators.inv_back(a, d_output)
 
 
 class Log(ScalarFunction):
@@ -78,15 +96,120 @@ class Log(ScalarFunction):
 
     @staticmethod
     def forward(ctx: Context, a: float) -> float:
+        """Invoke logarithm function saving arguments into context as necessary"""
         ctx.save_for_backward(a)
         return operators.log(a)
 
     @staticmethod
     def backward(ctx: Context, d_output: float) -> float:
+        """Compute logarithmic derivative on arguments in context, scaled by arbitrary input"""
         (a,) = ctx.saved_values
         return operators.log_back(a, d_output)
 
 
-# To implement.
+class Exp(ScalarFunction):
+    """Exponential function $f(x) = e ^ x$"""
+
+    @staticmethod
+    def forward(ctx: Context, a: float) -> float:
+        """Invoke exponentiation function saving arguments into context as necessary"""
+        ctx.save_for_backward(a)
+        return operators.exp(a)
+
+    @staticmethod
+    def backward(ctx: Context, d_output: float) -> float:
+        """Compute exponential derivative on arguments in context, scaled by arbitrary input"""
+        (a,) = ctx.saved_values
+        return operators.exp(a) * d_output
 
 
+class ReLU(ScalarFunction):
+    """ReLU function $f(x) = max(0, x)$"""
+
+    @staticmethod
+    def forward(ctx: Context, a: float) -> float:
+        """Invoke ReLU function saving arguments into context as necessary"""
+        ctx.save_for_backward(a)
+        return operators.relu(a)
+
+    @staticmethod
+    def backward(ctx: Context, d_output: float) -> float:
+        """Compute ReLU derivative on arguments in context, scaled by arbitrary input"""
+        (a,) = ctx.saved_values
+        return operators.relu_back(a, d_output)
+
+
+class Sigmoid(ScalarFunction):
+    """Sigmoid function $f(x) = 1 / (1 + exp(-x))$"""
+
+    @staticmethod
+    def forward(ctx: Context, a: float) -> float:
+        """Invoke sigmoid function saving arguments into context as necessary"""
+        ctx.save_for_backward(a)
+        return operators.sigmoid(a)
+
+    @staticmethod
+    def backward(ctx: Context, d_output: float) -> float:
+        """Compute sigmoid derivative on arguments in context, scaled by arbitrary input"""
+        (a,) = ctx.saved_values
+        return (
+            (operators.inv(1 + operators.exp(-a)) ** 2) * operators.exp(-a) * d_output
+        )
+
+
+class Add(ScalarFunction):
+    """Addition function $f(x, y) = x + y$"""
+
+    @staticmethod
+    def forward(ctx: Context, a: float, b: float) -> float:
+        """Invoke addition function saving arguments into context as necessary"""
+        return a + b
+
+    @staticmethod
+    def backward(ctx: Context, d_output: float) -> Tuple[float, ...]:
+        """Compute addition derivative on arguments in context, scaled by arbitrary input"""
+        return d_output, d_output
+
+
+class Mul(ScalarFunction):
+    """Multiplication function $f(x, y) = x * y$"""
+
+    @staticmethod
+    def forward(ctx: Context, a: float, b: float) -> float:
+        """Invoke multiplication function saving arguments into context as necessary"""
+        ctx.save_for_backward(a, b)
+        return a * b
+
+    @staticmethod
+    def backward(ctx: Context, d_output: float) -> Tuple[float, ...]:
+        """Compute multiplication derivative on arguments in context, scaled by arbitrary input"""
+        (a, b) = ctx.saved_values
+        return b * d_output, a * d_output
+
+
+class EQ(ScalarFunction):
+    """Equality function $f(x, y) = x == y$"""
+
+    @staticmethod
+    def forward(ctx: Context, a: float, b: float) -> float:
+        """Invoke equal to function saving arguments into context as necessary"""
+        return operators.eq(a, b)
+
+    @staticmethod
+    def backward(ctx: Context, d_output: float) -> float:
+        """Compute equal to derivative on arguments in context, scaled by arbitrary input"""
+        return 0.0
+
+
+class LT(ScalarFunction):
+    """Less than function $f(x, y) = x < y$"""
+
+    @staticmethod
+    def forward(ctx: Context, a: float, b: float) -> float:
+        """Invoke less than function saving arguments into context as necessary"""
+        return operators.lt(a, b)
+
+    @staticmethod
+    def backward(ctx: Context, d_output: float) -> float:
+        """Compute less than derivative on arguments in context, scaled by arbitrary input"""
+        return 0.0

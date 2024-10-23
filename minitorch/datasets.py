@@ -5,6 +5,7 @@ from typing import List, Tuple
 
 
 def make_pts(N: int) -> List[Tuple[float, float]]:
+    """Generate N random points in the unit square"""
     X = []
     for i in range(N):
         x_1 = random.random()
@@ -21,6 +22,17 @@ class Graph:
 
 
 def simple(N: int) -> Graph:
+    """Returns a Graph where the randomly-generated points are seperated by x coordinate (lt or ge to .5)
+
+    Args:
+    ----
+        N (int): Number of points in the graph
+
+    Returns:
+    -------
+        Graph: Graph with N points seperated by x coordinate (lt or ge to .5)
+
+    """
     X = make_pts(N)
     y = []
     for x_1, x_2 in X:
@@ -30,6 +42,17 @@ def simple(N: int) -> Graph:
 
 
 def diag(N: int) -> Graph:
+    """Returns a Graph where the randomly-generated points are seperated by a diagonal line
+
+    Args:
+    ----
+        N (int): Number of points in the graph
+
+    Returns:
+    -------
+        Graph: Graph with N points seperated by a diagonal line
+
+    """
     X = make_pts(N)
     y = []
     for x_1, x_2 in X:
@@ -39,6 +62,18 @@ def diag(N: int) -> Graph:
 
 
 def split(N: int) -> Graph:
+    """Returns a Graph where the randomly-generated points are seperated by x coordiate (either in [.2, .8] or not)
+
+
+    Args:
+    ----
+        N (int): Number of points in the graph
+
+    Returns:
+    -------
+        Graph: Graph with N points seperated by x coordinate (either in [.2, .8] or not)
+
+    """
     X = make_pts(N)
     y = []
     for x_1, x_2 in X:
@@ -48,6 +83,17 @@ def split(N: int) -> Graph:
 
 
 def xor(N: int) -> Graph:
+    """Returns a Graph where the randomly-generated points are seperated by quadrants (1 and 3 versus 2 and 4)
+
+    Args:
+    ----
+        N (int): Number of points in the graph
+
+    Returns:
+    -------
+        Graph: Graph with N points seperated by quadrants (1 and 3 versus 2 and 4)
+
+    """
     X = make_pts(N)
     y = []
     for x_1, x_2 in X:
@@ -57,6 +103,17 @@ def xor(N: int) -> Graph:
 
 
 def circle(N: int) -> Graph:
+    """Returns a Graph where the randomly-generated points are seperated by a circle
+
+    Args:
+    ----
+         N (int): Number of points in the graph
+
+    Returns:
+    -------
+         Graph: Graph with N points seperated by a circle
+
+    """
     X = make_pts(N)
     y = []
     for x_1, x_2 in X:
@@ -67,6 +124,18 @@ def circle(N: int) -> Graph:
 
 
 def spiral(N: int) -> Graph:
+    """Returns a Graph where the points are generated upon two spirals
+
+    Args:
+    ----
+         N (int): Number of points in the graph
+
+    Returns:
+    -------
+         Graph: Graph with N points seperated by the spiral upon which they were generated
+
+    """
+
     def x(t: float) -> float:
         return t * math.cos(t) / 20.0
 

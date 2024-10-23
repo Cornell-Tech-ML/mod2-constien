@@ -15,6 +15,7 @@ class SGD(Optimizer):
         self.lr = lr
 
     def zero_grad(self) -> None:
+        """Removes the stored gradient and derivative of the optimizer's parameters"""
         for p in self.parameters:
             if p.value is None:
                 continue
@@ -26,6 +27,7 @@ class SGD(Optimizer):
                     p.value.grad = None
 
     def step(self) -> None:
+        """Updates the parameters of the optimizer according to the current learning rate and gradient descent rules"""
         for p in self.parameters:
             if p.value is None:
                 continue
