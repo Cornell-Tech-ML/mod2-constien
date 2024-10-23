@@ -63,54 +63,26 @@ class Function:
         return minitorch.Tensor(c._tensor, back, backend=c.backend)
 
 
-class Neg(Function):
-    @staticmethod
-    def forward(ctx: Context, t1: Tensor) -> Tensor:
-        return t1.f.neg_map(t1)
+class Copy(Function):
+    """Copy function"""
 
     @staticmethod
-    def backward(ctx: Context, grad_output: Tensor) -> Tensor:
-        return grad_output.f.neg_map(grad_output)
-
-
-class Inv(Function):
-    @staticmethod
-    def forward(ctx: Context, t1: Tensor) -> Tensor:
-        ctx.save_for_backward(t1)
-        return t1.f.inv_map(t1)
+    def forward(ctx: Context, a: Tensor) -> Tensor:
+        """Id function makes contiguous"""
+        return a.f.id_map(a)
 
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tensor:
-        (t1,) = ctx.saved_values
-        return grad_output.f.inv_back_zip(t1, grad_output)
-
-
-class Add(Function):
-    @staticmethod
-    def forward(ctx: Context, t1: Tensor, t2: Tensor) -> Tensor:
-        return t1.f.add_zip(t1, t2)
-
-    @staticmethod
-    def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, Tensor]:
-        return grad_output, grad_output
-
-
-class All(Function):
-    @staticmethod
-    def forward(ctx: Context, a: Tensor, dim: Tensor) -> Tensor:
-        """Return 1 if all are true"""
-        if dim is not None:
-            return a.f.mul_reduce(a, int(dim.item()))
-        else:
-            return a.f.mul_reduce(a.contiguous().view(int(operators.prod(a.shape))), 0)
-
-
-# TODO: Implement for Task 2.3.
+        """Undo"""
+        return grad_output
 
 
 class View(Function):
+    """View function imposing new shape"""
+
     @staticmethod
     def forward(ctx: Context, a: Tensor, shape: Tensor) -> Tensor:
+        """Invoke view function saving arguments into context as necessary"""
         ctx.save_for_backward(a.shape)
         assert a._tensor.is_contiguous(), "Must be contiguous to view"
         shape2 = [int(shape[i]) for i in range(shape.size)]
@@ -130,16 +102,154 @@ class View(Function):
         )
 
 
-class Copy(Function):
+class Permute(Function):
+    """Permutation function swapping axis order"""
+
     @staticmethod
-    def forward(ctx: Context, a: Tensor) -> Tensor:
-        """Id function makes contiguous"""
-        return a.f.id_map(a)
+    def forward(ctx: Context, t1: Tensor, order: Tensor) -> Tensor:
+        """Invoke permutation function saving arguments into context as necessary"""
+        ctx.save_for_backward(order)
+        return t1._new(t1._tensor.permute(*(order.to_numpy().astype(int))))
+
+    @staticmethod
+    def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, Tensor]:
+        """Compute permutation derivative on arguments in context, scaled by arbitrary input"""
+        (order,) = ctx.saved_values
+        return grad_output._new(
+            grad_output._tensor.permute(*np.argsort(order.to_numpy().astype(int)))
+        ), grad_output._ensure_tensor(0.0)
+
+
+class Neg(Function):
+    """Negation function $f(x) = -x$"""
+
+    @staticmethod
+    def forward(ctx: Context, t1: Tensor) -> Tensor:
+        """Invoke negation function saving arguments into context as necessary"""
+        return t1.f.neg_map(t1)
 
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tensor:
-        """Undo"""
-        return grad_output
+        """Compute negation derivative on arguments in context, scaled by arbitrary input"""
+        return grad_output.f.neg_map(grad_output)
+
+
+class Inv(Function):
+    """Inverse function $f(x) = 1 / x$"""
+
+    @staticmethod
+    def forward(ctx: Context, t1: Tensor) -> Tensor:
+        """Invoke inverse function saving arguments into context as necessary"""
+        ctx.save_for_backward(t1)
+        return t1.f.inv_map(t1)
+
+    @staticmethod
+    def backward(ctx: Context, grad_output: Tensor) -> Tensor:
+        """Compute inverse derivative on arguments in context, scaled by arbitrary input"""
+        (t1,) = ctx.saved_values
+        return grad_output.f.inv_back_zip(t1, grad_output)
+
+
+class Log(Function):
+    """Log function $f(x) = log(x)$"""
+
+    @staticmethod
+    def forward(ctx: Context, t1: Tensor) -> Tensor:
+        """Invoke logarithm function saving arguments into context as necessary"""
+        ctx.save_for_backward(t1)
+        return t1.f.log_map(t1)
+
+    @staticmethod
+    def backward(ctx: Context, grad_output: Tensor) -> Tensor:
+        """Compute logarithmic derivative on arguments in context, scaled by arbitrary input"""
+        (t1,) = ctx.saved_values
+        return grad_output.f.log_back_zip(t1, grad_output)
+
+
+class Exp(Function):
+    """Exponential function $f(x) = e ^ x$"""
+
+    @staticmethod
+    def forward(ctx: Context, t1: Tensor) -> Tensor:
+        """Invoke exponentiation function saving arguments into context as necessary"""
+        ctx.save_for_backward(t1)
+        return t1.f.exp_map(t1)
+
+    @staticmethod
+    def backward(ctx: Context, grad_output: Tensor) -> Tensor:
+        """Compute exponential derivative on arguments in context, scaled by arbitrary input"""
+        (t1,) = ctx.saved_values
+        return grad_output.f.mul_zip(t1.f.exp_map(t1), grad_output)
+
+
+class ReLU(Function):
+    """ReLU function $f(x) = max(0, x)$"""
+
+    @staticmethod
+    def forward(ctx: Context, t1: Tensor) -> Tensor:
+        """Invoke ReLU function saving arguments into context as necessary"""
+        ctx.save_for_backward(t1)
+        return t1.f.relu_map(t1)
+
+    @staticmethod
+    def backward(ctx: Context, grad_output: Tensor) -> Tensor:
+        """Compute ReLU derivative on arguments in context, scaled by arbitrary input"""
+        (t1,) = ctx.saved_values
+        return grad_output.f.relu_back_zip(t1, grad_output)
+
+
+class Sigmoid(Function):
+    """Sigmoid function $f(x) = 1 / (1 + exp(-x))$"""
+
+    @staticmethod
+    def forward(ctx: Context, t1: Tensor) -> Tensor:
+        """Invoke sigmoid function saving arguments into context as necessary"""
+        ctx.save_for_backward(t1)
+        return t1.f.sigmoid_map(t1)
+
+    @staticmethod
+    def backward(ctx: Context, grad_out: Tensor) -> Tensor:
+        """Compute sigmoid derivative on arguments in context, scaled by arbitrary input"""
+        (t1,) = ctx.saved_values
+        sig = t1.f.sigmoid_map(t1)
+        return sig.f.mul_zip(
+            sig.f.mul_zip(
+                sig, sig.f.add_zip(sig._ensure_tensor(1), sig.f.neg_map(sig))
+            ),
+            grad_out,
+        )
+
+
+class Add(Function):
+    """Addition function $f(x, y) = x + y$"""
+
+    @staticmethod
+    def forward(ctx: Context, t1: Tensor, t2: Tensor) -> Tensor:
+        """Invoke addition function saving arguments into context as necessary"""
+        return t1.f.add_zip(t1, t2)
+
+    @staticmethod
+    def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, Tensor]:
+        """Compute addition derivative on arguments in context, scaled by arbitrary input"""
+        return grad_output, grad_output
+
+
+class Mul(Function):
+    """Multiplication function $f(x, y) = x * y$"""
+
+    @staticmethod
+    def forward(ctx: Context, t1: Tensor, t2: Tensor) -> Tensor:
+        """Invoke multiplication function saving arguments into context as necessary"""
+        ctx.save_for_backward(t1, t2)
+        return t1.f.mul_zip(t1, t2)
+
+    @staticmethod
+    def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, Tensor]:
+        """Compute multiplication derivative on arguments in context, scaled by arbitrary input"""
+        (t1, t2) = ctx.saved_values
+        return grad_output.f.mul_zip(t2, grad_output), grad_output.f.mul_zip(
+            t1, grad_output
+        )
 
 
 class MatMul(Function):
@@ -155,7 +265,7 @@ class MatMul(Function):
         t1, t2 = ctx.saved_values
 
         def transpose(a: Tensor) -> Tensor:
-            order = list(range(a.dims))
+            order = list(range(a.dims))  # type: ignore
             order[-2], order[-1] = order[-1], order[-2]
             return a._new(a._tensor.permute(*order))
 
@@ -163,6 +273,72 @@ class MatMul(Function):
             grad_output.f.matrix_multiply(grad_output, transpose(t2)),
             grad_output.f.matrix_multiply(transpose(t1), grad_output),
         )
+
+
+class EQ(Function):
+    """Equality function $f(x, y) = x == y$"""
+
+    @staticmethod
+    def forward(ctx: Context, t1: Tensor, t2: Tensor) -> Tensor:
+        """Invoke equal to function saving arguments into context as necessary"""
+        ctx.save_for_backward(t1, t2)
+        return t1.f.eq_zip(t1, t2)
+
+    @staticmethod
+    def backward(ctx: Context, grad_out: Tensor) -> Tuple[Tensor, Tensor]:
+        """Compute equal to derivative on arguments in context, scaled by arbitrary input"""
+        return grad_out.zeros(), grad_out.zeros()
+
+
+class LT(Function):
+    """Less than function $f(x, y) = x < y$"""
+
+    @staticmethod
+    def forward(ctx: Context, t1: Tensor, t2: Tensor) -> Tensor:
+        """Invoke less than function saving arguments into context as necessary"""
+        ctx.save_for_backward(t1, t2)
+        return t1.f.lt_zip(t1, t2)
+
+    @staticmethod
+    def backward(ctx: Context, grad_out: Tensor) -> Tuple[Tensor, Tensor]:
+        """Compute less than derivative on arguments in context, scaled by arbitrary input"""
+        return grad_out.zeros(), grad_out.zeros()
+
+
+class IsClose(Function):
+    """Is close function $f(x, y) = abs(x - y) < 1e-2$"""
+
+    @staticmethod
+    def forward(ctx: Context, t1: Tensor, t2: Tensor) -> Tensor:
+        """Invoke is_close to function saving arguments into context as necessary"""
+        ctx.save_for_backward(t1, t2)
+        return t1.f.is_close_zip(t1, t2)
+
+
+class All(Function):
+    """All function returning truthiness along a specified axis or all contained values if not provided"""
+
+    @staticmethod
+    def forward(ctx: Context, a: Tensor, dim: Tensor) -> Tensor:
+        """Return 1 if all are true"""
+        if dim is not None:
+            return a.f.mul_reduce(a, int(dim.item()))
+        else:
+            return a.f.mul_reduce(a.contiguous().view(int(operators.prod(a.shape))), 0)
+
+
+class Sum(Function):
+    """Sum function returning either sum along a specified axis or all contained values if not provided"""
+
+    @staticmethod
+    def forward(ctx: Context, t1: Tensor, dim: Tensor) -> Tensor:
+        """Invoke sum function saving arguments into context as necessary"""
+        return t1.f.add_reduce(t1, int(dim.item()))
+
+    @staticmethod
+    def backward(ctx: Context, grad_out: Tensor) -> Tuple[Tensor, Tensor]:
+        """Compute sum derivative on arguments in context, scaled by arbitrary input"""
+        return grad_out, grad_out._ensure_tensor(0.0)
 
 
 # Helpers for Constructing tensors
@@ -273,6 +449,23 @@ def tensor(
 def grad_central_difference(
     f: Any, *vals: Tensor, arg: int = 0, epsilon: float = 1e-6, ind: UserIndex
 ) -> float:
+    r"""Computes an approximation to the derivative of `f` with respect to one arg.
+
+    See :doc:`derivative` or https://en.wikipedia.org/wiki/Finite_difference for more details.
+
+    Args:
+    ----
+        f : arbitrary function from n-scalar args to one value
+        *vals : n-float values $x_0 \ldots x_{n-1}$
+        arg : the number $i$ of the arg to compute the derivative
+        epsilon : a small constant
+        ind: a UserIndex
+
+    Returns:
+    -------
+        An approximation of $f'_i(x_0, \ldots, x_{n-1})$
+
+    """
     x = vals[arg]
     up = zeros(x.shape)
     up[ind] = epsilon
